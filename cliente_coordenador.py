@@ -5,6 +5,7 @@ import time
 import sys
 import os
 from threading import Thread
+import threading
 
 from shapely.geometry import Point, Polygon
 
@@ -17,6 +18,10 @@ remote_start = 0
 local_pronto = False
 remoto_pronto = False
 
+itens_enviados = {}
+itens_recebidos = {}
+
+semaforo = threading.Semaphore()
 
 class ClientProtocol(DatagramProtocol):
 
@@ -38,57 +43,88 @@ class ClientProtocol(DatagramProtocol):
             f.write(str(lon) + ';' + str(lat) + '\n')
 
     def escrever_resultado_recebido(self, lon, lat):
-        # Abrir arquivo .csv resultado
-        with open("result_remote.csv", "a+") as f:
-            
-            # Fazer append
-            f.write(str(lon) + ';' + str(lat) + '\n')
+        if str(lon) != '-' and str(lat) != '':
+            # Abrir arquivo .csv resultado
+            with open("result_remote.csv", "a+") as f:
+                
+                # Fazer append
+                f.write(str(lon) + ';' + str(lat) + '\n')
 
     def processar_arquivo_remotamente(self):#, linha_de_inicio):
-        #global arquivo
+        global itens_enviados
+        global itens_recebidos
         global remote_start
+        global local_pronto
+        global remoto_pronto
 
         remote_start = time.time()
         falhas = []
 
         # Abrir arquivo .csv
-        with open('coords_trabalhador.csv', 'r') as _file:
+        with open('test2.csv', 'r') as _file:
 
             # Pula linhas ate chegar na linha de inicio especificada
             # for i in range(0, linha_de_inicio):
             #     _file.readline()
 
+            i = 0
             # Ler linha a linha
             while True:
                 linha = _file.readline()
-                
+                i += 1
+
                 # Se chegou ao final do arquivo, sair
                 if not linha:
                     break
 
+                dado = str(i) + ';' + str(linha.strip())
+
                 try:
-                    self.transport.write(linha.strip(), self.peer_address)
+                    itens_enviados[i] = linha.strip()
+                    self.transport.write(dado, self.peer_address)
                 except:
-                    falhas.append(linha.strip())
+                    falhas.append(dado)
             
+        # Garante que todas as linhas sejam enviadas para o peer
         while len(falhas) > 0:
             linha = falhas.pop()
 
             try:
                 self.transport.write(linha, self.peer_address)
+                time.sleep(0.0005)
             except:
                 falhas.append(linha)
 
         print 'enviou ultimo arquivo remoto!'
 
-        sucesso = False
-        while not sucesso:
-            try:
-                #TODO - receber ack de recebimento fim
-                self.transport.write('fim', self.peer_address)
-                sucesso = True
-            except:
-                pass
+        recebeu_todos = False
+
+        # Garante que todos os dados enviados receberam uma resposta correspondente
+        while not recebeu_todos:
+            semaforo.acquire()
+            enviados_keys = itens_enviados.keys()
+            recebidos_keys = itens_recebidos.keys()
+            semaforo.release()
+            matches = set(enviados_keys) - set(recebidos_keys)
+
+            if not (set(enviados_keys) - set(recebidos_keys)):
+                print("Lista enviada bate com lista recebida")
+                recebeu_todos = True
+            else:
+                nao_recebidos = list(matches)
+                for idx in nao_recebidos:
+                    try:
+                        data = itens_enviados[idx]
+                        self.transport.write(str(idx) + ';' + data, self.peer_address)
+                        time.sleep(0.0005)
+                    except:
+                        pass
+        
+        elapsed = end - start
+        print 'processamento remoto finalizado em ' + str(elapsed) + ' segundos'
+        remoto_pronto = True
+        if local_pronto:
+            sys.exit()
 
     def processar_arquivo_localmente(self):#, linha_final):
         #global arquivo
@@ -98,7 +134,7 @@ class ClientProtocol(DatagramProtocol):
         start = time.time()
 
         # Abrir arquivo .csv
-        with open('coords_coordenador.csv', 'r') as _file:
+        with open('local.csv', 'r') as _file:
 
             linhas = 0
             # Ler linha a linha
@@ -107,7 +143,7 @@ class ClientProtocol(DatagramProtocol):
                 
                 # Se chegou ao final do arquivo
                 # ou ja processou o num de linhas especificado, sair
-                if not linha:# or linhas > linha_final:
+                if not linha:
                     print 'terminou processamento local!'
                     break
 
@@ -167,6 +203,8 @@ class ClientProtocol(DatagramProtocol):
         global remote_start
         global remoto_pronto
         global local_pronto
+        global itens_enviados
+        global itens_recebidos
 
         if not self.server_connect:
             self.server_connect = True
@@ -187,30 +225,30 @@ class ClientProtocol(DatagramProtocol):
             self.transport.write(msg, self.peer_address)
 
         else:
+            print "received " + datagram
             if not self.connected_success:
                 self.connected_success = True
 
                 time.sleep(1)
                 self.dividir_tarefa_processar()
             else:
-                if str(datagram).strip() == 'fim':
-                    end = time.time()
-                    elapsed = end - remote_start
-                    print 'processamento remoto finalizado em ' + str(elapsed) + ' segundos'
+                resultado = datagram.split(';')
+                idx = resultado[0]
 
-                    remoto_pronto = True
-                    if local_pronto:
-                        sys.exit()
-                else:
-                    #print 'Received:', datagram
+                semaforo.acquire()
+                try:
+                    del itens_enviados[idx]
+                except:
+                    pass
 
-                    resultado = datagram.split(';')
-                    self.escrever_resultado_recebido(resultado[0], resultado[1])
+                itens_recebidos[idx] = datagram
+                self.escrever_resultado_recebido(resultado[1], resultado[2])
+                semaforo.release()
 
 if __name__ == '__main__':
 
-    # sys.argv.append('54.39.99.92')
-    sys.argv.append('192.168.30.183')
+    sys.argv.append('54.39.99.92')
+    #sys.argv.append('192.168.30.183')
     sys.argv.append('8089')
 
     if len(sys.argv) < 3:

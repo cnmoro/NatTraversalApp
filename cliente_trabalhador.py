@@ -17,7 +17,7 @@ semaforo = threading.Semaphore()
 
 class ClientProtocol(DatagramProtocol):
 
-    def esta_no_poligono(self, lon, lat):
+    def esta_no_poligono(self, idx, lon, lat):
         global poligono
 
         # Verifica se esta no poligono
@@ -25,14 +25,15 @@ class ClientProtocol(DatagramProtocol):
         
         # Se estiver, escrever resultado em arquivo
         if ponto.within(parana):
-            self.enviar_resultado(lon, lat)
+            self.enviar_resultado(str(idx) + ';' + str(lon) + ';' + str(lat))
+        else:
+            self.enviar_resultado(str(idx) + ';-;-')
 
-    def enviar_resultado(self, lon, lat):
+    def enviar_resultado(self, msg):
         global falhas
         global semaforo
 
         # Enviar resultado para o cliente_coordenador
-        msg = str(lon) + ';' + str(lat)
         try:
     	    self.transport.write(msg, self.peer_address)
         except:
@@ -99,20 +100,14 @@ class ClientProtocol(DatagramProtocol):
             if not self.connected_success:
                 self.connected_success = True
             else:
-                #print 'Received:', datagram
-                if str(datagram).strip() == 'fim':
-                    print 'recebeu fim do coordenador'
-                    #self.transport.write('fim', self.peer_address)
-                    self.reenviar_falhas()
-                else:
-                    resultado = datagram.split(';')
-                    self.esta_no_poligono(float(resultado[0]), float(resultado[1]))
+                resultado = datagram.split(';')
+                self.esta_no_poligono(resultado[0], float(resultado[1]), float(resultado[2]))
 
 
 if __name__ == '__main__':
 
-    #sys.argv.append('54.39.99.92')
-    sys.argv.append('192.168.30.183')
+    sys.argv.append('54.39.99.92')
+    #sys.argv.append('192.168.30.183')
     sys.argv.append('8089')
 
     if len(sys.argv) < 3:
