@@ -52,15 +52,6 @@ class ClientProtocol(DatagramProtocol):
                 self.transport.write(linha, self.peer_address)
             except:
                 falhas.append(linha)
-
-        sucesso = False
-        while not sucesso:
-            try:
-                self.transport.write('fim', self.peer_address)
-                sucesso = True
-                print 'enviou fim'
-            except:
-                pass
     
         # fecha o programa
         sys.exit()
@@ -100,9 +91,11 @@ class ClientProtocol(DatagramProtocol):
             if not self.connected_success:
                 self.connected_success = True
             else:
-                resultado = datagram.split(';')
-                self.esta_no_poligono(resultado[0], float(resultado[1]), float(resultado[2]))
-
+                try:
+                    resultado = datagram.split(';')
+                    self.esta_no_poligono(resultado[0], float(resultado[1]), float(resultado[2]))
+                except:
+                    pass
 
 if __name__ == '__main__':
 

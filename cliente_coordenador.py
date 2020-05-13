@@ -97,10 +97,8 @@ class ClientProtocol(DatagramProtocol):
 
         print 'enviou ultimo arquivo remoto!'
 
-        recebeu_todos = False
-
         # Garante que todos os dados enviados receberam uma resposta correspondente
-        while not recebeu_todos:
+        while True:
             semaforo.acquire()
             enviados_keys = itens_enviados.keys()
             recebidos_keys = itens_recebidos.keys()
@@ -109,7 +107,7 @@ class ClientProtocol(DatagramProtocol):
 
             if not (set(enviados_keys) - set(recebidos_keys)):
                 print("Lista enviada bate com lista recebida")
-                recebeu_todos = True
+                break
             else:
                 nao_recebidos = list(matches)
                 for idx in nao_recebidos:
@@ -120,7 +118,8 @@ class ClientProtocol(DatagramProtocol):
                     except:
                         pass
         
-        elapsed = end - start
+        end = time.time()
+        elapsed = end - remote_start
         print 'processamento remoto finalizado em ' + str(elapsed) + ' segundos'
         remoto_pronto = True
         if local_pronto:
@@ -215,6 +214,7 @@ class ClientProtocol(DatagramProtocol):
             self.peer_init = True
             self.peer_address = self.toAddress(datagram)
             self.transport.write('init', self.peer_address)
+            self.transport.write('init', self.peer_address)
             print 'Sent init to %s:%d' % self.peer_address
 
         elif not self.peer_connect:
@@ -225,25 +225,22 @@ class ClientProtocol(DatagramProtocol):
             self.transport.write(msg, self.peer_address)
 
         else:
-            print "received " + datagram
             if not self.connected_success:
                 self.connected_success = True
 
                 time.sleep(1)
                 self.dividir_tarefa_processar()
             else:
-                resultado = datagram.split(';')
-                idx = resultado[0]
-
-                semaforo.acquire()
                 try:
-                    del itens_enviados[idx]
+                    resultado = datagram.split(';')
+                    idx = resultado[0]
+
+                    semaforo.acquire()
+                    itens_recebidos[int(idx)] = datagram
+                    self.escrever_resultado_recebido(resultado[1], resultado[2])
+                    semaforo.release()
                 except:
                     pass
-
-                itens_recebidos[idx] = datagram
-                self.escrever_resultado_recebido(resultado[1], resultado[2])
-                semaforo.release()
 
 if __name__ == '__main__':
 
