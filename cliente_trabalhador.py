@@ -99,8 +99,8 @@ class ClientProtocol(DatagramProtocol):
 
 if __name__ == '__main__':
 
-    sys.argv.append('54.39.99.92')
-    #sys.argv.append('192.168.30.183')
+    #sys.argv.append('54.39.99.92')
+    sys.argv.append('192.168.30.183')
     sys.argv.append('8089')
 
     if len(sys.argv) < 3:
