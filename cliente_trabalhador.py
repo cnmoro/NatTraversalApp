@@ -71,7 +71,6 @@ class ClientProtocol(DatagramProtocol):
     def datagramReceived(self, datagram, host):
         if not self.server_connect:
             self.server_connect = True
-            self.transport.write('ok', (sys.argv[1], int(sys.argv[2])))
             print 'Connected to server, waiting for peer...'
 
         elif not self.peer_init:
@@ -79,13 +78,6 @@ class ClientProtocol(DatagramProtocol):
             self.peer_address = self.toAddress(datagram)
             self.transport.write('init', self.peer_address)
             print 'Sent init to %s:%d' % self.peer_address
-
-        elif not self.peer_connect:
-            self.peer_connect = True
-            host = self.transport.getHost().host
-            port = self.transport.getHost().port
-            msg = 'Message from %s:%d' % (host, port)
-            self.transport.write(msg, self.peer_address)
 
         else:
             if not self.connected_success:
@@ -98,13 +90,8 @@ class ClientProtocol(DatagramProtocol):
                     pass
 
 if __name__ == '__main__':
-
-    #sys.argv.append('54.39.99.92')
-    sys.argv.append('192.168.30.183')
-    sys.argv.append('8089')
-
     if len(sys.argv) < 3:
-        print "Uso: $ python client.py SERVER_IP SERVER_PORT"
+        print "Uso: $ python cliente_trabalhador.py SERVER_IP SERVER_PORT"
         sys.exit(1)
 
     protocol = ClientProtocol()

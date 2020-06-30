@@ -49,7 +49,7 @@ class ServerProtocol(DatagramProtocol):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print "Usage: ./server.py PORT"
+        print "Uso: $ python server.py PORT"
         sys.exit(1)
 
     port = int(sys.argv[1])

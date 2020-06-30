@@ -19,10 +19,11 @@ local_pronto = False
 remoto_pronto = False
 
 itens_enviados = {}
-itens_recebidos = {}
 
-teste_env = []
-teste = []
+indexes_enviados = []
+indexes_recebidos = []
+
+utilizar_garantia_recebimento = True
 
 semaforo = threading.Semaphore()
 
@@ -57,23 +58,18 @@ class ClientProtocol(DatagramProtocol):
 
     def processar_arquivo_remotamente(self):#, linha_de_inicio):
         global itens_enviados
-        global itens_recebidos
         global remote_start
         global local_pronto
         global remoto_pronto
-        global teste
-        global teste_env
+        global indexes_recebidos
+        global indexes_enviados
+        global utilizar_garantia_recebimento
 
         remote_start = time.time()
         falhas = []
 
         # Abrir arquivo .csv
         with open('coords_remote.csv', 'r') as _file:
-
-            # Pula linhas ate chegar na linha de inicio especificada
-            # for i in range(0, linha_de_inicio):
-            #     _file.readline()
-
             i = 0
             # Ler linha a linha
             while True:
@@ -89,7 +85,7 @@ class ClientProtocol(DatagramProtocol):
                 try:
                     itens_enviados[i] = linha.strip()
                     self.transport.write(dado, self.peer_address)
-                    teste_env.append(i)
+                    indexes_enviados.append(i)
                 except:
                     falhas.append(dado)
             
@@ -99,49 +95,27 @@ class ClientProtocol(DatagramProtocol):
 
             try:
                 self.transport.write(linha, self.peer_address)
-                # time.sleep(0.00001)
             except:
                 falhas.append(linha)
 
         print 'enviou ultimo arquivo remoto!'
 
         # Garante que todos os dados enviados receberam uma resposta correspondente
-        # while True:
-        #     semaforo.acquire()
-        #     enviados_keys = itens_enviados.keys()
-        #     recebidos_keys = itens_recebidos.keys()
-        #     semaforo.release()
-        #     matches = set(enviados_keys) - set(recebidos_keys)
+        if utilizar_garantia_recebimento:
+            while True:
+                semaforo.acquire()
+                matches = set(indexes_enviados) - set(indexes_recebidos)
+                semaforo.release()
+                if not matches:
+                    break
 
-        #     if not (set(enviados_keys) - set(recebidos_keys)):
-        #         print("Lista enviada bate com lista recebida")
-        #         break
-        #     else:
-        #         nao_recebidos = list(matches)
-        #         print 'faltam ' + str(len(nao_recebidos)) + ' remoto'
-        #         for idx in nao_recebidos:
-        #             try:
-        #                 data = itens_enviados[idx]
-        #                 self.transport.write(str(idx) + ';' + data, self.peer_address)
-        #                 time.sleep(0.0002)
-        #             except:
-        #                 pass
-
-        while True:
-            semaforo.acquire()
-            matches = set(teste_env) - set(teste)
-            semaforo.release()
-            if not matches:
-                break
-
-            print(len(matches))
-            for d in matches:
-                try:
-                    self.transport.write(str(d) + ';' + itens_enviados[int(d)], self.peer_address)
-                    # time.sleep(0.00001)
-                except:
-                    pass
-        
+                print(len(matches))
+                for d in matches:
+                    try:
+                        self.transport.write(str(d) + ';' + itens_enviados[int(d)], self.peer_address)
+                        time.sleep(0.00002)
+                    except:
+                        pass
 
         end = time.time()
         elapsed = end - remote_start
@@ -150,8 +124,7 @@ class ClientProtocol(DatagramProtocol):
         if local_pronto:
             sys.exit()
 
-    def processar_arquivo_localmente(self):#, linha_final):
-        #global arquivo
+    def processar_arquivo_localmente(self):
         global remoto_pronto
         global local_pronto
 
@@ -178,7 +151,7 @@ class ClientProtocol(DatagramProtocol):
 
                 linhas += 1
 
-                if linhas % 100000 == 0:
+                if linhas % 5000 == 0:
                     print 'processou ' + str(linhas)
 
         end = time.time()
@@ -217,27 +190,18 @@ class ClientProtocol(DatagramProtocol):
         global remoto_pronto
         global local_pronto
         global itens_enviados
-        global itens_recebidos
-        global teste
+        global indexes_recebidos
+        global utilizar_garantia_recebimento
 
         if not self.server_connect:
             self.server_connect = True
-            self.transport.write('ok', (sys.argv[1], int(sys.argv[2])))
             print 'Connected to server, waiting for peer...'
 
         elif not self.peer_init:
             self.peer_init = True
             self.peer_address = self.toAddress(datagram)
             self.transport.write('init', self.peer_address)
-            self.transport.write('init', self.peer_address)
             print 'Sent init to %s:%d' % self.peer_address
-
-        elif not self.peer_connect:
-            self.peer_connect = True
-            host = self.transport.getHost().host
-            port = self.transport.getHost().port
-            msg = 'Message from %s:%d' % (host, port)
-            self.transport.write(msg, self.peer_address)
 
         else:
             if not self.connected_success:
@@ -247,26 +211,20 @@ class ClientProtocol(DatagramProtocol):
                 self.dividir_tarefa_processar()
             else:
                 try:
-                    resultado = datagram.split(';')
-                    idx = resultado[0]
-                    semaforo.acquire()
-                    teste.append(int(idx))
-                    semaforo.release()
-                    # semaforo.acquire()
-                    # itens_recebidos[int(idx)] = datagram
-                    # self.escrever_resultado_recebido(resultado[1], resultado[2])
-                    # semaforo.release()
+                    if utilizar_garantia_recebimento:
+                        resultado = datagram.split(';')
+                        idx = resultado[0]
+                        semaforo.acquire()
+                        indexes_recebidos.append(int(idx))
+                        semaforo.release()
+                    else:
+                        pass
                 except:
                     pass
 
 if __name__ == '__main__':
-
-    #sys.argv.append('54.39.99.92')
-    sys.argv.append('192.168.30.183')
-    sys.argv.append('8089')
-
     if len(sys.argv) < 3:
-        print "Uso: $ python client.py SERVER_IP SERVER_PORT"
+        print "Uso: $ python cliente_coordenador.py SERVER_IP SERVER_PORT"
         sys.exit(1)
 
     protocol = ClientProtocol()
